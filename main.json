@@ -1,0 +1,403 @@
+{
+  "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#",
+  "contentVersion": "1.0.0.0",
+  "metadata": {
+    "_generator": {
+      "name": "bicep",
+      "version": "0.3.255.40792",
+      "templateHash": "14371060178931271788"
+    }
+  },
+  "parameters": {
+    "resourcePrefix": {
+      "type": "string",
+      "metadata": {
+        "description": "first part of resource name. Max 11 characters"
+      }
+    },
+    "vnetName": {
+      "type": "string"
+    },
+    "subnetName": {
+      "type": "string",
+      "metadata": {
+        "description": "new or existing subnet in the virtual network"
+      }
+    },
+    "subnetAddressSpace": {
+      "type": "string",
+      "metadata": {
+        "description": "new or existing subnetAddressSpace."
+      }
+    },
+    "currentDate": {
+      "type": "string",
+      "defaultValue": "[utcNow('yyyy-MM-dd')]"
+    },
+    "vnetResourceGroup": {
+      "type": "string",
+      "defaultValue": "[resourceGroup().name]",
+      "metadata": {
+        "description": "Change if the virtual network is in a different resource group then the storage account"
+      }
+    },
+    "version": {
+      "type": "string",
+      "defaultValue": "1.0.0"
+    }
+  },
+  "functions": [],
+  "variables": {
+    "tagValues": {
+      "Source": "TemplateSpecs",
+      "Version": "[parameters('version')]",
+      "deploymentDate": "[parameters('currentDate')]"
+    }
+  },
+  "resources": [
+    {
+      "type": "Microsoft.Resources/deployments",
+      "apiVersion": "2019-10-01",
+      "name": "sta",
+      "properties": {
+        "expressionEvaluationOptions": {
+          "scope": "inner"
+        },
+        "mode": "Incremental",
+        "parameters": {
+          "storageAccountPrefix": {
+            "value": "[parameters('resourcePrefix')]"
+          },
+          "tagValues": {
+            "value": "[variables('tagValues')]"
+          }
+        },
+        "template": {
+          "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#",
+          "contentVersion": "1.0.0.0",
+          "metadata": {
+            "_generator": {
+              "name": "bicep",
+              "version": "0.3.255.40792",
+              "templateHash": "13980490136630588782"
+            }
+          },
+          "parameters": {
+            "storageAccountPrefix": {
+              "type": "string",
+              "maxLength": 11
+            },
+            "location": {
+              "type": "string",
+              "defaultValue": "[resourceGroup().location]"
+            },
+            "tagValues": {
+              "type": "object"
+            }
+          },
+          "functions": [],
+          "resources": [
+            {
+              "type": "Microsoft.Storage/storageAccounts",
+              "apiVersion": "2021-01-01",
+              "name": "[concat(parameters('storageAccountPrefix'), uniqueString(resourceGroup().id))]",
+              "location": "[parameters('location')]",
+              "sku": {
+                "name": "Standard_LRS"
+              },
+              "kind": "StorageV2",
+              "tags": "[parameters('tagValues')]",
+              "properties": {
+                "supportsHttpsTrafficOnly": true,
+                "minimumTlsVersion": "TLS1_2"
+              }
+            }
+          ],
+          "outputs": {
+            "staid": {
+              "type": "string",
+              "value": "[resourceId('Microsoft.Storage/storageAccounts', concat(parameters('storageAccountPrefix'), uniqueString(resourceGroup().id)))]"
+            }
+          }
+        }
+      }
+    },
+    {
+      "type": "Microsoft.Resources/deployments",
+      "apiVersion": "2019-10-01",
+      "name": "privateEndPoint",
+      "properties": {
+        "expressionEvaluationOptions": {
+          "scope": "inner"
+        },
+        "mode": "Incremental",
+        "parameters": {
+          "tagValues": {
+            "value": "[variables('tagValues')]"
+          },
+          "privateEndpointName": {
+            "value": "[format('{0}-pep', parameters('resourcePrefix'))]"
+          },
+          "storageAccountId": {
+            "value": "[reference(resourceId('Microsoft.Resources/deployments', 'sta'), '2019-10-01').outputs.staid.value]"
+          },
+          "subnetId": {
+            "value": "[reference(extensionResourceId(format('/subscriptions/{0}/resourceGroups/{1}', subscription().subscriptionId, parameters('vnetResourceGroup')), 'Microsoft.Resources/deployments', parameters('subnetName')), '2019-10-01').outputs.newSubnetId.value]"
+          }
+        },
+        "template": {
+          "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#",
+          "contentVersion": "1.0.0.0",
+          "metadata": {
+            "_generator": {
+              "name": "bicep",
+              "version": "0.3.255.40792",
+              "templateHash": "7190740923949963763"
+            }
+          },
+          "parameters": {
+            "privateEndpointName": {
+              "type": "string"
+            },
+            "location": {
+              "type": "string",
+              "defaultValue": "[resourceGroup().location]"
+            },
+            "storageAccountId": {
+              "type": "string"
+            },
+            "subnetId": {
+              "type": "string"
+            },
+            "tagValues": {
+              "type": "object"
+            },
+            "groupIds": {
+              "type": "array",
+              "defaultValue": [
+                "blob"
+              ],
+              "allowedValues": [
+                "blob",
+                "table",
+                "queue",
+                "share"
+              ]
+            }
+          },
+          "functions": [],
+          "variables": {
+            "privateDnsZoneName": "[format('{0}.blob.core.windows.net', parameters('privateEndpointName'))]"
+          },
+          "resources": [
+            {
+              "type": "Microsoft.Network/privateEndpoints",
+              "apiVersion": "2020-11-01",
+              "name": "[parameters('privateEndpointName')]",
+              "tags": "[parameters('tagValues')]",
+              "location": "[parameters('location')]",
+              "properties": {
+                "privateLinkServiceConnections": [
+                  {
+                    "name": "[parameters('privateEndpointName')]",
+                    "properties": {
+                      "privateLinkServiceId": "[parameters('storageAccountId')]",
+                      "groupIds": "[parameters('groupIds')]",
+                      "privateLinkServiceConnectionState": {
+                        "status": "Approved",
+                        "description": "Auto-Approved",
+                        "actionsRequired": "None"
+                      }
+                    }
+                  }
+                ],
+                "subnet": {
+                  "id": "[parameters('subnetId')]"
+                }
+              }
+            },
+            {
+              "type": "Microsoft.Network/privateDnsZones",
+              "apiVersion": "2020-06-01",
+              "name": "[variables('privateDnsZoneName')]",
+              "tags": "[parameters('tagValues')]",
+              "location": "global"
+            }
+          ]
+        }
+      },
+      "dependsOn": [
+        "[resourceId('Microsoft.Resources/deployments', 'sta')]",
+        "[extensionResourceId(format('/subscriptions/{0}/resourceGroups/{1}', subscription().subscriptionId, parameters('vnetResourceGroup')), 'Microsoft.Resources/deployments', parameters('subnetName'))]"
+      ]
+    },
+    {
+      "type": "Microsoft.Resources/deployments",
+      "apiVersion": "2019-10-01",
+      "name": "nsg",
+      "resourceGroup": "[parameters('vnetResourceGroup')]",
+      "properties": {
+        "expressionEvaluationOptions": {
+          "scope": "inner"
+        },
+        "mode": "Incremental",
+        "parameters": {
+          "ResourcePrefix": {
+            "value": "[parameters('resourcePrefix')]"
+          },
+          "tagValues": {
+            "value": "[variables('tagValues')]"
+          },
+          "securityRules": {
+            "value": []
+          }
+        },
+        "template": {
+          "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#",
+          "contentVersion": "1.0.0.0",
+          "metadata": {
+            "_generator": {
+              "name": "bicep",
+              "version": "0.3.255.40792",
+              "templateHash": "433761278370042260"
+            }
+          },
+          "parameters": {
+            "ResourcePrefix": {
+              "type": "string",
+              "defaultValue": "bicep"
+            },
+            "ResourceName": {
+              "type": "string",
+              "defaultValue": "bicep"
+            },
+            "location": {
+              "type": "string",
+              "defaultValue": "[resourceGroup().location]"
+            },
+            "tagValues": {
+              "type": "object"
+            },
+            "securityRules": {
+              "type": "array"
+            }
+          },
+          "functions": [],
+          "variables": {
+            "nsgName": "[if(not(empty(parameters('ResourcePrefix'))), format('{0}-NSG', parameters('ResourcePrefix')), parameters('ResourceName'))]"
+          },
+          "resources": [
+            {
+              "type": "Microsoft.Network/networkSecurityGroups",
+              "apiVersion": "2020-06-01",
+              "name": "[variables('nsgName')]",
+              "location": "[parameters('location')]",
+              "tags": "[parameters('tagValues')]",
+              "properties": {
+                "copy": [
+                  {
+                    "name": "securityRules",
+                    "count": "[length(parameters('securityRules'))]",
+                    "input": {
+                      "name": "[parameters('securityRules')[copyIndex('securityRules')].name]",
+                      "properties": {
+                        "protocol": "[parameters('securityRules')[copyIndex('securityRules')].protocol]",
+                        "sourcePortRange": "[parameters('securityRules')[copyIndex('securityRules')].sourcePortRange]",
+                        "destinationPortRange": "[parameters('securityRules')[copyIndex('securityRules')].destinationPortRange]",
+                        "sourceAddressPrefix": "[parameters('securityRules')[copyIndex('securityRules')].sourceAddressPrefix]",
+                        "destinationAddressPrefix": "[parameters('securityRules')[copyIndex('securityRules')].destinationAddressPrefix]",
+                        "access": "[parameters('securityRules')[copyIndex('securityRules')].access]",
+                        "priority": "[parameters('securityRules')[copyIndex('securityRules')].priority]",
+                        "direction": "[parameters('securityRules')[copyIndex('securityRules')].direction]"
+                      }
+                    }
+                  }
+                ]
+              }
+            }
+          ],
+          "outputs": {
+            "nsgid": {
+              "type": "string",
+              "value": "[resourceId('Microsoft.Network/networkSecurityGroups', variables('nsgName'))]"
+            }
+          }
+        }
+      }
+    },
+    {
+      "type": "Microsoft.Resources/deployments",
+      "apiVersion": "2019-10-01",
+      "name": "[parameters('subnetName')]",
+      "resourceGroup": "[parameters('vnetResourceGroup')]",
+      "properties": {
+        "expressionEvaluationOptions": {
+          "scope": "inner"
+        },
+        "mode": "Incremental",
+        "parameters": {
+          "vnetName": {
+            "value": "[parameters('vnetName')]"
+          },
+          "subnet": {
+            "value": {
+              "name": "[parameters('subnetName')]",
+              "virtualNetworkPrefix": "[parameters('subnetAddressSpace')]",
+              "privateEndpointNetworkPolicies": "Disabled",
+              "privateLinkServiceNetworkPolicies": "Disabled",
+              "nsg": "[reference(extensionResourceId(format('/subscriptions/{0}/resourceGroups/{1}', subscription().subscriptionId, parameters('vnetResourceGroup')), 'Microsoft.Resources/deployments', 'nsg'), '2019-10-01').outputs.nsgid.value]"
+            }
+          }
+        },
+        "template": {
+          "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#",
+          "contentVersion": "1.0.0.0",
+          "metadata": {
+            "_generator": {
+              "name": "bicep",
+              "version": "0.3.255.40792",
+              "templateHash": "12776390376048513638"
+            }
+          },
+          "parameters": {
+            "vnetName": {
+              "type": "string"
+            },
+            "subnet": {
+              "type": "object"
+            }
+          },
+          "functions": [],
+          "resources": [
+            {
+              "type": "Microsoft.Network/virtualNetworks/subnets",
+              "apiVersion": "2020-11-01",
+              "name": "[format('{0}/{1}', parameters('vnetName'), parameters('subnet').name)]",
+              "properties": {
+                "addressPrefix": "[parameters('subnet').virtualNetworkPrefix]",
+                "networkSecurityGroup": {
+                  "id": "[parameters('subnet').nsg]"
+                },
+                "serviceEndpoints": [
+                  {
+                    "service": "Microsoft.Storage"
+                  }
+                ],
+                "privateEndpointNetworkPolicies": "[parameters('subnet').privateEndpointNetworkPolicies]"
+              }
+            }
+          ],
+          "outputs": {
+            "newSubnetId": {
+              "type": "string",
+              "value": "[resourceId('Microsoft.Network/virtualNetworks/subnets', split(format('{0}/{1}', parameters('vnetName'), parameters('subnet').name), '/')[0], split(format('{0}/{1}', parameters('vnetName'), parameters('subnet').name), '/')[1])]"
+            }
+          }
+        }
+      },
+      "dependsOn": [
+        "[extensionResourceId(format('/subscriptions/{0}/resourceGroups/{1}', subscription().subscriptionId, parameters('vnetResourceGroup')), 'Microsoft.Resources/deployments', 'nsg')]"
+      ]
+    }
+  ]
+}
